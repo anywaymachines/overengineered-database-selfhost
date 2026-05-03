@@ -24,7 +24,7 @@ const convertToSQL = async (filepath: string, callback: (line: string[][]) => vo
     });
 
     // I AM TOO LAZY TO PERFORM BATCH OPERATIONS!
-    const BATCH_SIZE = 5000;
+    const BATCH_SIZE = 5_000;
     let batch: string[][] = [];
     for await (const line of rl) {
         batch.push(line.split("\t"));
@@ -62,7 +62,7 @@ if (existsSync(TEXT_USERS_FOLDER)) {
         const start = Date.now();
         const name = `saves/${file}`;
         console.log(`Loading ${name}...`);
-        const p = convertToSQL(resolve(TEXT_USERS_FOLDER, name), (arr) => DatabaseInteractions.insertPlayers(db, arr.map(v =>
+        const p = convertToSQL(resolve(TEXT_USERS_FOLDER, file), (arr) => DatabaseInteractions.insertPlayers(db, arr.map(v =>
         {
             console.log(arr);
             const [_, slotIndex, playerId, data] = v;
