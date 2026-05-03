@@ -64,7 +64,6 @@ if (existsSync(TEXT_USERS_FOLDER)) {
         console.log(`Loading ${name}...`);
         const p = convertToSQL(resolve(TEXT_USERS_FOLDER, file), (arr) => DatabaseInteractions.insertPlayers(db, arr.map(v =>
         {
-            console.log(arr);
             const [_, slotIndex, playerId, data] = v;
             return {
                 slotIndex: Number(slotIndex!),
