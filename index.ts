@@ -3,7 +3,7 @@ import { createReadStream, existsSync, readdirSync, renameSync } from "node:fs";
 import { createInterface } from "node:readline";
 import { Database } from "bun:sqlite";
 import { HttpHandler } from "./Classes/HttpHandler";
-import { extname, resolve } from "node:path";
+import { basename, extname, resolve } from "node:path";
 
 console.time("Import");
 
@@ -57,12 +57,15 @@ const convertToSQL = async (filepath: string, callback: (line: string[][]) => vo
         if (batch.length >= BATCH_SIZE) {
             callback(batch);
             batch = [];
+            console.log(`Processed another ${BATCH_SIZE}..`)
         }
-
     }
 
-    if (batch.length)
+    if (batch.length) {
         callback(batch);
+        console.log(`Processed another ${BATCH_SIZE}..`)
+    }
+
 
     renameSync(filepath, filepath + ".processed");
 }
@@ -77,11 +80,16 @@ DatabaseInteractions.initPlayerTable(db);
 DatabaseInteractions.initSavesTable(db);
 
 const promises: Promise<any>[] = [];
+console.log("Uploading data from .txt files...")
+
 
 const TEXT_USERS_FOLDER = "./db_files/players";
 if (existsSync(TEXT_USERS_FOLDER)) {
-    for (const file of readdirSync(resolve())) {
-        const p = convertToSQL(file, (arr) => DatabaseInteractions.insertPlayers(db, arr.map(v =>
+    for (const file of readdirSync(TEXT_USERS_FOLDER)) {
+        const start = Date.now();
+        const name = `saves/${file}`;
+        console.log(`Loading ${name}...`);
+        const p = convertToSQL(resolve(TEXT_USERS_FOLDER, name), (arr) => DatabaseInteractions.insertPlayers(db, arr.map(v =>
         {
             const [_, slotIndex, playerId, data] = v;
             return {
@@ -91,13 +99,17 @@ if (existsSync(TEXT_USERS_FOLDER)) {
             };
         })));
         promises.push(p);
+        console.log(`Finished loading ${name} in ${(Date.now() - start) / 1000}s.`);
     }
 }
 
 const TEXT_SAVES_FOLDER = "./db_files/saves";
 if (existsSync(TEXT_SAVES_FOLDER)) {
-    for (const file of readdirSync(resolve())) {
-        const p = convertToSQL(file, (arr) => DatabaseInteractions.insertSave(db,
+    for (const file of readdirSync(TEXT_SAVES_FOLDER)) {
+        const start = Date.now();
+        const name = `players/${file}`;
+        console.log(`Loading ${name}...`);
+        const p = convertToSQL(resolve(TEXT_SAVES_FOLDER, name), (arr) => DatabaseInteractions.insertSave(db,
             arr.map(v =>
             {
                 const [playerId, data] = v;
@@ -107,12 +119,15 @@ if (existsSync(TEXT_SAVES_FOLDER)) {
                 };
             })));
         promises.push(p);
+        console.log(`Finished loading ${name} in ${(Date.now() - start) / 1000}s.`);
     }
 }
-
-await Promise.allSettled(promises);
-
-console.timeEnd("Import");
+if (!promises.length)
+    console.log("No .txt files found.");
+else {
+    await Promise.allSettled(promises);
+    console.log("Import complete!");
+}
 
 // http server
 HttpHandler.init(db, "overengineered", 1367);
