@@ -48,8 +48,8 @@ To request player data with ID "238427763" you'd need to use GET with endpoint:
 The result will be:
 ```json
 {
-  "player_id":"238427763",
-  "data":"..."
+    "player_id":"238427763",
+    "data":"..."
 }
 ```
 To request all saves for player ID "238427763" you'd need to use GET with endpoint:
@@ -59,10 +59,10 @@ To request all saves for player ID "238427763" you'd need to use GET with endpoi
 The result will be:
 ```json
 {
-"player_id":"238427763",
-"saves":[
-    {...save1},
-    {...save2}
+    "player_id":"238427763",
+    "saves":[
+        {...save1},
+        {...save2}
     ]
 }
 ```
@@ -77,7 +77,7 @@ The result will be:
     "player_id":"238427763",
     "index":"30",
     "data":"..."
-    }
+}
 ```
 
 If there are duplicates then the first from the list will be taken.
