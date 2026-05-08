@@ -17,7 +17,8 @@ export type SaveResult = DataResult & {
 
 const destringifyData = (entry: DataEntry): DataResult => ({ ...entry, data: JSON.parse(entry.data) })
 
-export namespace DatabaseInteractions {
+export namespace DatabaseInteractions
+{
     /* USERID \t {
          "data": { ... }, 
          "slots": [ ... ],
@@ -26,7 +27,8 @@ export namespace DatabaseInteractions {
          "achievements": { ... }
         }
     */
-    export const initPlayerTable = (db: Database) => {
+    export const initPlayerTable = (db: Database) =>
+    {
         db.run(`
             CREATE TABLE IF NOT EXISTS players (
                 player_id TEXT UNIQUE,
@@ -38,13 +40,15 @@ export namespace DatabaseInteractions {
     export const insertPlayers = (
         db: Database,
         playerData: DataEntry[]
-    ) => {
+    ) =>
+    {
         const prep = db.prepare(`
                 INSERT INTO players (player_id, data) 
                 VALUES ($player, $data)
                 ON CONFLICT(player_id) DO UPDATE SET data = excluded.data
         `);
-        db.transaction((data) => {
+        db.transaction((data) =>
+        {
             for (const d of data) {
                 prep.run({ $player: d.playerID, $data: d.data });
             }
@@ -62,7 +66,8 @@ export namespace DatabaseInteractions {
 
     // SLOT DATA:
     //  INCREMENT \t INDEX \t USERID \t { "blocks": [ ... ], "version": ## }
-    export const initSavesTable = (db: Database) => {
+    export const initSavesTable = (db: Database) =>
+    {
         db.run(`
             CREATE TABLE IF NOT EXISTS saves (
             increment INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -77,14 +82,16 @@ export namespace DatabaseInteractions {
     export const insertSave = (
         db: Database,
         saveData: SaveEntry[]
-    ) => {
+    ) =>
+    {
         const prep = db.prepare(`
             INSERT INTO saves (player_id, "index", data) 
             VALUES ($player, $index, $data)
             ON CONFLICT(player_id, "index") DO UPDATE SET data = excluded.data
         `);
 
-        db.transaction((data: typeof saveData) => {
+        db.transaction((data: typeof saveData) =>
+        {
             for (const d of data) {
                 prep.run({ $player: d.playerID, $index: d.index, $data: d.data });
             }
