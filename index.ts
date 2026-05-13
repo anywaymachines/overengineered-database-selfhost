@@ -16,7 +16,7 @@ try {
     WRITE_TOKEN = await tokenFile.text();
     isUsingPlaceholderToken = WRITE_TOKEN.trim() === placeholder.trim();
     if (isUsingPlaceholderToken)
-        console.warn("You're still using the placeholder token! Replace it immediatley!");
+        console.warn("You're still using the placeholder token! Replace it immediatley or you won't be able to write any data!");
     else
         console.log("Token found.");
 } catch (err: any) {

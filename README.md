@@ -38,6 +38,7 @@ SaveData:
 | GET | /overengineered/save/:id/:index/:page | Get a segment page of the save at the given index for a player | id (player ID), index (slot ID), page (page index; starts from 0)  |
 | POST | /overengineered/player | Insert or update player entry | { slotIndex: number, playerId: string, data: string, token: string } |
 | POST | /overengineered/save | Insert or update a save entry | { playerId: string, data: string, token: string } |
+| POST | /overengineered/migrate | Copy slots from one player to another | {fromID: string, toID: string}  |
 
 ### example
 For dev environment, the <HOST_IP> will be http://localhost:1367
