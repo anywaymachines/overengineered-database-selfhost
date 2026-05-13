@@ -5,7 +5,8 @@ import { write_token } from '../Access Tokens/securityTokens';
 
 
 // AI slop here :)
-function splitUtf8(str: string, maxBytes = 4096) {
+function splitUtf8(str: string, maxBytes = 4096)
+{
     const buffer = Buffer.from(str, 'utf8');
     const chunks = [];
     let offset = 0;
@@ -41,6 +42,7 @@ type MigrationResult = { error: string, err_type: errType } | { metadata: string
 type preparedCachedSaveData = {
     data: string,
     slicedData: string[]
+    timeout?: ReturnType<typeof setTimeout>
 };
 
 const cachedSaveData = new Map<
@@ -48,7 +50,8 @@ const cachedSaveData = new Map<
     Map<slotIndex, preparedCachedSaveData>
 >();
 
-const findCachedSaveData = (id: playerID, index: slotIndex) => {
+const findCachedSaveData = (id: playerID, index: slotIndex) =>
+{
     const playerCached = cachedSaveData.get(id);
     if (!playerCached) {
         cachedSaveData.set(id, new Map());
@@ -59,7 +62,8 @@ const findCachedSaveData = (id: playerID, index: slotIndex) => {
 };
 
 
-const updateSaveCache = (db: Database, id: playerID, index: slotIndex): preparedCachedSaveData | undefined => {
+const updateSaveCache = (db: Database, id: playerID, index: slotIndex): preparedCachedSaveData | undefined =>
+{
     let cachedSave = findCachedSaveData(id, index);
     if (!cachedSave) {
         const gotSave = DatabaseInteractions.getSavesOfPlayerByIDWithIndex(db, id, index);
@@ -72,44 +76,51 @@ const updateSaveCache = (db: Database, id: playerID, index: slotIndex): prepared
         const saveStr = JSON.stringify(gotSave);
         cachedSave = {
             data: saveStr,
-            slicedData: splitUtf8(saveStr, 1_000_000)
+            slicedData: splitUtf8(saveStr, 1_000_000),
         };
         cachedSaveData.get(id)!.set(index, cachedSave);
-
-        // remove that from the cache after 30 mins
-        setTimeout(
-            () => cachedSaveData.get(id)?.delete(index),
-            30 * 60 * 1_000
-        );
     }
+
+    clearTimeout(cachedSave.timeout);
+    cachedSave.timeout = setTimeout(
+        () => cachedSaveData.get(id)?.delete(index),
+        30 * 60 * 1_000
+    );
+
     return cachedSave;
 }
 
-export namespace HttpHandler {
-    export const init = (db: Database, base: string, port: number) => {
+export namespace HttpHandler
+{
+    export const init = (db: Database, base: string, port: number) =>
+    {
         const app = new Elysia();
         app.listen(port);
 
         // read player data by id
-        app.get(`/${base}/player/:id`, ({ params: { id } }): errcode | DataResult => {
+        app.get(`/${base}/player/:id`, ({ params: { id } }): errcode | DataResult =>
+        {
             const player = DatabaseInteractions.getDataEntryByID(db, id);
             return player ?? { error: 'Not found', err_type: "NOT_FOUND" };
         });
 
         // read all saves by player id
-        app.get(`/${base}/save/:id`, ({ params: { id } }): errcode | { saves: (SaveResult | undefined)[] } => {
+        app.get(`/${base}/save/:id`, ({ params: { id } }): errcode | { saves: (SaveResult | undefined)[] } =>
+        {
             const saves = DatabaseInteractions.getSavesOfPlayerByID(db, id);
             return saves ? { saves } : { error: 'Not found', err_type: "NOT_FOUND" };
         });
 
         // read single save by player id
-        app.get(`/${base}/save/:id/:index`, ({ params: { id, index } }): errcode | string => {
+        app.get(`/${base}/save/:id/:index`, ({ params: { id, index } }): errcode | string =>
+        {
             const save = updateSaveCache(db, id, index);
             return save?.data ?? { error: 'Not found', err_type: "NOT_FOUND" };
         });
 
         // read single save by player id by page 
-        app.get(`/${base}/save/:id/:index/:page`, ({ params: { id, index, page } }): errcode | string => {
+        app.get(`/${base}/save/:id/:index/:page`, ({ params: { id, index, page } }): errcode | string =>
+        {
             const pg = Number(page);
             if (isNaN(pg)) return { error: 'No page found', err_type: "NOT_FOUND" };
 
@@ -123,7 +134,8 @@ export namespace HttpHandler {
         });
 
         // write player
-        app.post(`/${base}/player`, ({ body }): errcode => {
+        app.post(`/${base}/player`, ({ body }): errcode =>
+        {
             if (body.token !== write_token) return { error: "Incorrect token", err_type: "INCORRECT_TOKEN" };
             DatabaseInteractions.insertPlayers(db, [body]);
             return { status: 'ok' };
@@ -136,7 +148,8 @@ export namespace HttpHandler {
         });
 
         // write save (I'm not doing batches)
-        app.post(`/${base}/save`, ({ body }): errcode => {
+        app.post(`/${base}/save`, ({ body }): errcode =>
+        {
             if (body.token !== write_token) return { error: "Incorrect token", err_type: "INCORRECT_TOKEN" };
             DatabaseInteractions.insertSave(db, [body]);
 
@@ -162,7 +175,8 @@ export namespace HttpHandler {
         });
 
         // copies saves of one person to saves of another person
-        app.post(`/${base}/migrate`, ({ body }): MigrationResult => {
+        app.post(`/${base}/migrate`, ({ body }): MigrationResult =>
+        {
             if (body.token !== write_token) return { error: "Incorrect token", err_type: "INCORRECT_TOKEN" };
 
             // Migrate metadata
