@@ -1,41 +1,26 @@
 import { DatabaseInteractions, type DataEntry, type SaveEntry } from "./Classes/DatabaseInteractions";
-import { createReadStream, existsSync, readdirSync, readFileSync, } from "node:fs";
+import { appendFileSync, createReadStream, existsSync, readdirSync } from "node:fs";
 import { createInterface } from "node:readline";
 import { Database } from "bun:sqlite";
 import { HttpHandler } from "./Classes/HttpHandler";
 import { basename, extname, resolve } from "node:path";
 import { rename } from "node:fs/promises";
+import { TokenHandler } from "./Classes/TokenHandler";
 
 // export db write token
-const tokenFile = Bun.file("./Access Tokens/WRITE_TOKEN");
 const placeholder = "REPLACE THIS TEXT WITH YOUR TOKEN OR PASSWORD (BETTER USE TOKENS)";
+const [WRITE_TOKEN, isUsingPlaceholderWriteToken] = await TokenHandler.getOrGenerateToken(Bun.file("./Access Tokens/WRITE_TOKEN"), placeholder);
+const [ADMIN_TOKEN, isUsingPlaceholderAdminToken] = await TokenHandler.getOrGenerateToken(Bun.file("./Access Tokens/ADMIN_TOKEN"), placeholder);
 
-let isUsingPlaceholderToken: boolean;
-let WRITE_TOKEN: string;
-try {
-    WRITE_TOKEN = (await tokenFile.text()).trim();
-    isUsingPlaceholderToken = WRITE_TOKEN === placeholder.trim();
-    if (isUsingPlaceholderToken)
-        console.warn("You're still using the placeholder token! Replace it immediatley or you won't be able to write any data!");
-    else
-        console.log("Token found.");
-} catch (err: any) {
-    if (err.code !== "ENOENT") throw err;
-
-    // NOT tokenFile.write because it WILL THROW EXCEPTION IF FOLDERS DO NOT EXIST!!
-    await Bun.write(tokenFile, placeholder);
-    WRITE_TOKEN = placeholder;
-
-    console.log("New token file was generated! Replace placeholder with your own token!");
-    isUsingPlaceholderToken = true;
-}
-export { WRITE_TOKEN, isUsingPlaceholderToken };
+export { WRITE_TOKEN, isUsingPlaceholderWriteToken };
+export { ADMIN_TOKEN, isUsingPlaceholderAdminToken };
 
 // i3ym
 const unslash = (str: string) => str.replaceAll("\\\\", "\\")
 
 // could've done generic but I'm too lazy
-const convertToSQL = async (filepath: string, callback: (line: string[][]) => void) => {
+const convertToSQL = async (filepath: string, callback: (line: string[][]) => void) =>
+{
     if (extname(filepath) !== ".txt") return;
     console.log("filepath:", filepath);
 
@@ -86,7 +71,8 @@ if (existsSync(TEXT_PLAYERS_FOLDER)) {
         console.log(`Loading ${name}...`);
         const p = convertToSQL(
             resolve(TEXT_PLAYERS_FOLDER, file),
-            (batch) => DatabaseInteractions.insertPlayers(db, batch.map(v => {
+            (batch) => DatabaseInteractions.insertPlayers(db, batch.map(v =>
+            {
                 const [playerID, data] = v;
                 return {
                     playerID: playerID!,
@@ -108,7 +94,8 @@ if (existsSync(TEXT_SAVES_FOLDER)) {
         const p = convertToSQL(
             resolve(TEXT_SAVES_FOLDER, file),
             (batch) => DatabaseInteractions.insertSave(db,
-                batch.map(v => {
+                batch.map(v =>
+                {
                     const [increment, index, playerID, data] = v;
                     return {
                         playerID: playerID!,
@@ -126,6 +113,41 @@ if (!promises.length)
 else {
     await Promise.allSettled(promises);
     console.log("Import complete!");
+}
+
+const migrationsPlayer = `${TEXT_PLAYERS_FOLDER}/migrations.txt.processed`;
+const migrationsSave = `${TEXT_SAVES_FOLDER}/migrations.txt.processed`;
+
+// `${body.toID}\t${JSON.stringify(v.Data)}\n`
+export const logMigration = async ({ migratedPlayer, migratedSave }: { migratedPlayer: DataEntry, migratedSave: SaveEntry[] }) =>
+{
+    // Player Metadata
+    try {
+        appendFileSync(
+            migrationsPlayer,
+            `${migratedPlayer.playerID}\t${migratedPlayer.data}\n`, // ID, Data
+            "utf-8");
+        console.log(`Migration player data for ${migratedPlayer.playerID} written successfully.`);
+    } catch (e) {
+        console.warn(`Unable to write migration player data for ${migratedPlayer.playerID}!`);
+        console.error(e);
+    }
+
+    // Saves
+    for (let i = 0; i < migratedSave.length; i++) {
+        const save = migratedSave[i]!;
+        try {
+            appendFileSync(
+                migrationsSave,
+                `${i}\t${save.index}\t${save.playerID}\t${typeof save === "string" ? save : JSON.stringify(save)}\n`, // Increment, Index, ID, Data
+                "utf-8"
+            );
+            console.log(`Migration save data for ${save.playerID} [${save.index}] written successfully.`);
+        } catch (e) {
+            console.warn(`Unable to write migration save data for ${save.playerID} [${save.index}]!`);
+            console.error(e);
+        }
+    }
 }
 
 // http server

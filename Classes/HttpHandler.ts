@@ -1,7 +1,7 @@
 import { Elysia, t } from 'elysia';
 import { DatabaseInteractions, type DataEntry, type DataResult, type SaveEntry, type SaveResult } from './DatabaseInteractions';
 import { Database } from "bun:sqlite";
-import { isUsingPlaceholderToken, WRITE_TOKEN } from '..';
+import { isUsingPlaceholderWriteToken, logMigration, WRITE_TOKEN } from '..';
 
 
 // AI slop here :)
@@ -136,7 +136,7 @@ export namespace HttpHandler
         // write player
         app.post(`/${base}/player`, ({ body }): errcode =>
         {
-            if (isUsingPlaceholderToken) return { error: "Using placeholder token", err_type: "INCORRECT_TOKEN" };
+            if (isUsingPlaceholderWriteToken) return { error: "Using placeholder token", err_type: "INCORRECT_TOKEN" };
             if (body.token !== WRITE_TOKEN) return { error: "Incorrect token", err_type: "INCORRECT_TOKEN" };
             DatabaseInteractions.insertPlayers(db, [body]);
             return { status: 'ok' };
@@ -151,7 +151,7 @@ export namespace HttpHandler
         // write save (I'm not doing batches)
         app.post(`/${base}/save`, ({ body }): errcode =>
         {
-            if (isUsingPlaceholderToken) return { error: "Using placeholder token", err_type: "INCORRECT_TOKEN" };
+            if (isUsingPlaceholderWriteToken) return { error: "Using placeholder token", err_type: "INCORRECT_TOKEN" };
             if (body.token !== WRITE_TOKEN) return { error: "Incorrect token", err_type: "INCORRECT_TOKEN" };
             DatabaseInteractions.insertSave(db, [body]);
 
@@ -187,11 +187,11 @@ export namespace HttpHandler
         // copies saves of one person to saves of another person
         app.post(`/${base}/migrate`, ({ body }): MigrationResult =>
         {
-            if (isUsingPlaceholderToken) return { error: "Using placeholder token", err_type: "INCORRECT_TOKEN" };
+            if (isUsingPlaceholderWriteToken) return { error: "Using placeholder token", err_type: "INCORRECT_TOKEN" };
             if (body.token !== WRITE_TOKEN) return { error: "Incorrect token", err_type: "INCORRECT_TOKEN" };
 
             // Migrate metadata
-            const metadata = DatabaseInteractions.getDataEntryByID(db, body.fromID)
+            const metadata = DatabaseInteractions.getDataEntryByID(db, body.fromID);
             if (!metadata) return { error: `No meta data from PlayerID ${body.fromID} was found`, err_type: "NOT_FOUND" }
             const newdata = { ...metadata, playerID: body.toID, data: JSON.stringify(metadata!.data) } as DataEntry
 
@@ -199,6 +199,8 @@ export namespace HttpHandler
             const allSaves = DatabaseInteractions.getSavesOfPlayerByID(db, body.fromID);
             if (!allSaves) return { error: `No save data from PlayerID ${body.fromID} was found`, err_type: "NOT_FOUND" }
             const migratedData: SaveEntry[] = allSaves.map(v => (({ ...v, playerID: body.toID, data: JSON.stringify(v!.data) })));
+
+            logMigration({ migratedPlayer: newdata, migratedSave: migratedData })
 
             return {
                 metadata: DatabaseInteractions.insertPlayers(db, [newdata]),
