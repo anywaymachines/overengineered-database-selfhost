@@ -1,31 +1,38 @@
 import { Database } from "bun:sqlite";
 
-export type DataEntry = {
+export type UnarsedCommonData = {
     playerID: string,
     data: string,
 }
 
-export type DataResult = {
+export type ParsedCommonData = {
     playerID: string,
     data: Array<unknown>,
 }
 
-export type SaveEntry = DataEntry & {
-    index: string
+export type ParsedCommonDataWithIndex = ParsedCommonData & {
+    index: string,
 }
 
-export type SaveResult = DataResult & {
+export type UnparsedCommonDataWithIndex = UnarsedCommonData & {
     index: string,
+}
+
+export type SavedSlotDatabaseFormat = {
+    playerID: string,
+    index: string,
+    data: string
+}
+
+export type SavedPlayerFormat = {
+    playerID: string,
+    data: { [key: string]: any }
 }
 
 export type InteractionResult = "SUCCESS" | "FAIL"
 
-const destringifyData = (entry: DataEntry | undefined): DataResult | undefined => {
-    if (!entry) return undefined
-    return ({ ...entry, data: JSON.parse(entry.data) })
-}
-
-export namespace DatabaseInteractions {
+export namespace DatabaseInteractions
+{
     /* USERID \t {
          "data": { ... }, 
          "slots": [ ... ],
@@ -34,7 +41,8 @@ export namespace DatabaseInteractions {
          "achievements": { ... }
         }
     */
-    export const initPlayerTable = (db: Database) => {
+    export const initPlayerTable = (db: Database) =>
+    {
         db.run(`
             CREATE TABLE IF NOT EXISTS players (
                 playerID TEXT UNIQUE,
@@ -45,15 +53,17 @@ export namespace DatabaseInteractions {
 
     export const insertPlayers = (
         db: Database,
-        playerData: DataEntry[]
-    ): InteractionResult => {
+        playerData: SavedPlayerFormat[]
+    ): InteractionResult =>
+    {
         try {
             const prep = db.prepare(`
                 INSERT INTO players (playerID, data) 
                 VALUES ($player, $data)
                 ON CONFLICT(playerID) DO UPDATE SET data = excluded.data
         `);
-            db.transaction((data) => {
+            db.transaction((data) =>
+            {
                 for (const d of data) {
                     prep.run({ $player: d.playerID, $data: d.data });
                 }
@@ -64,18 +74,18 @@ export namespace DatabaseInteractions {
         return "SUCCESS"
     }
 
-    export const getDataEntryByID = (db: Database, playerID: string): DataResult | undefined => destringifyData(
+    export const getDataEntryByID = (db: Database, playerID: string) =>
         db.query(`
             SELECT * FROM players 
             WHERE playerID = ? 
             LIMIT 1
-        `).get(playerID) as DataEntry
-    )
+        `).get(playerID) as ParsedCommonData;
 
 
     // SLOT DATA:
     //  INCREMENT \t INDEX \t USERID \t { "blocks": [ ... ], "version": ## }
-    export const initSavesTable = (db: Database) => {
+    export const initSavesTable = (db: Database) =>
+    {
         db.run(`
             CREATE TABLE IF NOT EXISTS saves (
             increment INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -89,8 +99,9 @@ export namespace DatabaseInteractions {
 
     export const insertSave = (
         db: Database,
-        saveData: SaveEntry[]
-    ): InteractionResult => {
+        saveData: ParsedCommonDataWithIndex[]
+    ): InteractionResult =>
+    {
         try {
             const prep = db.prepare(`
             INSERT INTO saves (playerID, "index", data) 
@@ -98,9 +109,14 @@ export namespace DatabaseInteractions {
             ON CONFLICT(playerID, "index") DO UPDATE SET data = excluded.data
         `);
 
-            db.transaction((data: typeof saveData) => {
+            db.transaction((data: typeof saveData) =>
+            {
                 for (const d of data) {
-                    prep.run({ $player: d.playerID, $index: d.index, $data: d.data });
+                    const prepared: SavedSlotDatabaseFormat = {
+                        ...d,
+                        data: JSON.stringify(d.data),
+                    }
+                    prep.run({ $player: prepared.playerID, $index: prepared.index, $data: prepared.data });
                 }
             })(saveData);
         } catch {
@@ -109,19 +125,26 @@ export namespace DatabaseInteractions {
         return "SUCCESS"
     }
 
-    export const getSavesOfPlayerByID = (db: Database, playerID: string): SaveResult[] | undefined =>
-        db.query(`
+    export const getSavesOfPlayerByID = (db: Database, playerID: string) =>
+    {
+        const res = db.query(`
             SELECT * FROM saves
             WHERE playerID = ?
             ORDER BY increment DESC
-        `).all(playerID)?.map(entry => destringifyData(entry as SaveEntry) as SaveResult);
+        `).all(playerID) as SavedSlotDatabaseFormat[] | undefined;
+        if (!res) return;
+        return res.map(v => JSON.parse(v.data)) as ParsedCommonDataWithIndex[];
+    };
 
-    export const getSavesOfPlayerByIDWithIndex = (db: Database, playerID: string, index: string): SaveResult | undefined => destringifyData(
-        db.query(`
+    export const getSavesOfPlayerByIDWithIndex = (db: Database, playerID: string, index: string) =>
+    {
+        const res = db.query(`
             SELECT * FROM saves 
             WHERE playerID = ? AND "index" = ?
             ORDER BY increment DESC 
             LIMIT 1
-        `).get(playerID, index) as SaveEntry | undefined
-    ) as SaveResult | undefined
+        `).get(playerID, index) as SavedSlotDatabaseFormat | undefined;
+        if (!res) return;
+        return { ...res, data: JSON.parse(res.data) } as ParsedCommonDataWithIndex;
+    }
 }

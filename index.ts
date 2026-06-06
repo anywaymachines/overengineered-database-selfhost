@@ -1,4 +1,3 @@
-import { DatabaseInteractions, type DataEntry, type SaveEntry } from "./Classes/DatabaseInteractions";
 import { appendFileSync, createReadStream, existsSync, readdirSync } from "node:fs";
 import { createInterface } from "node:readline";
 import { Database } from "bun:sqlite";
@@ -6,6 +5,7 @@ import { HttpHandler } from "./Classes/HttpHandler";
 import { basename, extname, resolve } from "node:path";
 import { rename } from "node:fs/promises";
 import { TokenHandler } from "./Classes/TokenHandler";
+import { DatabaseInteractions, type ParsedDataResult, type ParsedSaveEntry, type UnparsedDataEntry, type UnparsedSaveEntry } from "./Classes/DatabaseInteractions";
 
 // export db write token
 const placeholder = "REPLACE THIS TEXT WITH YOUR TOKEN OR PASSWORD (BETTER USE TOKENS)";
@@ -17,6 +17,16 @@ export { ADMIN_TOKEN, isUsingPlaceholderAdminToken };
 
 // i3ym
 const unslash = (str: string) => str.replaceAll("\\\\", "\\")
+const destringifyData = <T>(entry: (T & UnparsedDataEntry) | undefined): (T & ParsedDataResult) | undefined =>
+{
+    if (!entry) return undefined;
+    let data = entry.data;
+    while (typeof data === "string")
+        data = JSON.parse(entry.data);
+
+    return ({ ...entry, data });
+}
+
 
 // could've done generic but I'm too lazy
 const convertToSQL = async (filepath: string, callback: (line: string[][]) => void) =>
@@ -69,16 +79,18 @@ if (existsSync(TEXT_PLAYERS_FOLDER)) {
         const start = Date.now();
         const name = `saves/${file}`;
         console.log(`Loading ${name}...`);
+
+
         const p = convertToSQL(
             resolve(TEXT_PLAYERS_FOLDER, file),
             (batch) => DatabaseInteractions.insertPlayers(db, batch.map(v =>
             {
                 const [playerID, data] = v;
-                return {
+                return destringifyData({
                     playerID: playerID!,
                     data: data!
-                } as DataEntry;
-            }))
+                });
+            }).filter(v => !!v))
         );
         promises.push(p);
         console.log(`Finished loading ${name} in ${(Date.now() - start) / 1000}s.`);
@@ -97,12 +109,12 @@ if (existsSync(TEXT_SAVES_FOLDER)) {
                 batch.map(v =>
                 {
                     const [increment, index, playerID, data] = v;
-                    return {
+                    return destringifyData({
                         playerID: playerID!,
                         index: index!,
                         data: data!
-                    } as SaveEntry;
-                })));
+                    });
+                }).filter(v => !!v)));
         promises.push(p);
         console.log(`Finished loading ${name} in ${(Date.now() - start) / 1000}s.`);
     }
@@ -119,7 +131,7 @@ const migrationsPlayer = `${TEXT_PLAYERS_FOLDER}/migrations.txt.processed`;
 const migrationsSave = `${TEXT_SAVES_FOLDER}/migrations.txt.processed`;
 
 // `${body.toID}\t${JSON.stringify(v.Data)}\n`
-export const logMigration = async ({ migratedPlayer, migratedSave }: { migratedPlayer: DataEntry, migratedSave: SaveEntry[] }) =>
+export const logMigration = async ({ migratedPlayer, migratedSave }: { migratedPlayer: ParsedDataResult, migratedSave: ParsedSaveEntry[] }) =>
 {
     // Player Metadata
     try {
@@ -139,7 +151,7 @@ export const logMigration = async ({ migratedPlayer, migratedSave }: { migratedP
         try {
             appendFileSync(
                 migrationsSave,
-                `${i}\t${save.index}\t${save.playerID}\t${typeof save === "string" ? save : JSON.stringify(save)}\n`, // Increment, Index, ID, Data
+                `${i}\t${save.index}\t${save.playerID}\t${JSON.stringify(save)}\n`, // Increment, Index, ID, Data
                 "utf-8"
             );
             console.log(`Migration save data for ${save.playerID} [${save.index}] written successfully.`);

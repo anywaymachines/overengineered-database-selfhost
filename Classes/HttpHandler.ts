@@ -1,8 +1,8 @@
 import { Elysia, t } from 'elysia';
-import { DatabaseInteractions, type DataEntry, type DataResult, type SaveEntry, type SaveResult } from './DatabaseInteractions';
 import { Database } from "bun:sqlite";
 import { ADMIN_TOKEN, isUsingPlaceholderAdminToken, isUsingPlaceholderWriteToken, logMigration, WRITE_TOKEN } from '..';
 import { GameEventsHandler } from './GameEventsHandler';
+import { DatabaseInteractions, type ParsedCommonData, type ParsedCommonDataWithIndex } from './DatabaseInteractions';
 
 
 // AI slop here :)
@@ -41,7 +41,7 @@ type errType = "OUT_OF_INDEX" | "NOT_FOUND" | "INCORRECT_TOKEN";
 type errcode = { error: string, err_type: errType } | { status: string };
 type MigrationResult = { error: string, err_type: errType } | { metadata: string, saves: string }
 type preparedCachedSaveData = {
-    data: string,
+    data: Array<unknown>,
     slicedData: string[]
     timeout?: ReturnType<typeof setTimeout>
 };
@@ -70,14 +70,9 @@ const updateSaveCache = (db: Database, id: playerID, index: slotIndex): prepared
         const gotSave = DatabaseInteractions.getSavesOfPlayerByIDWithIndex(db, id, index);
         if (!gotSave) return; // return nothing because nothing to update in the cache
 
-        // super duper fix
-        if (typeof gotSave.data === "string")
-            gotSave.data = JSON.parse(gotSave.data);
-
-        const saveStr = JSON.stringify(gotSave);
         cachedSave = {
-            data: saveStr,
-            slicedData: splitUtf8(saveStr, 1_000_000),
+            data: gotSave.data,
+            slicedData: splitUtf8(JSON.stringify(gotSave), 1_000_000),
         };
         cachedSaveData.get(id)!.set(index, cachedSave);
     }
@@ -99,14 +94,14 @@ export namespace HttpHandler
         app.listen(port);
 
         // read player data by id
-        app.get(`/${base}/player/:id`, ({ params: { id } }): errcode | DataResult =>
+        app.get(`/${base}/player/:id`, ({ params: { id } }): errcode | ParsedCommonData =>
         {
             const player = DatabaseInteractions.getDataEntryByID(db, id);
             return player ?? { error: 'Not found', err_type: "NOT_FOUND" };
         });
 
         // read all saves by player id
-        app.get(`/${base}/save/:id`, ({ params: { id } }): errcode | { saves: (SaveResult | undefined)[] } =>
+        app.get(`/${base}/save/:id`, ({ params: { id } }): errcode | { saves: (ParsedCommonDataWithIndex | undefined)[] } =>
         {
             const saves = DatabaseInteractions.getSavesOfPlayerByID(db, id);
             return saves ? { saves } : { error: 'Not found', err_type: "NOT_FOUND" };
@@ -116,7 +111,8 @@ export namespace HttpHandler
         app.get(`/${base}/save/:id/:index`, ({ params: { id, index } }): errcode | string =>
         {
             const save = updateSaveCache(db, id, index);
-            return save?.data ?? { error: 'Not found', err_type: "NOT_FOUND" };
+            if (save) return JSON.stringify(save.data);
+            return { error: 'Not found', err_type: "NOT_FOUND" };
         });
 
         // read single save by player id by page 
@@ -168,7 +164,7 @@ export namespace HttpHandler
         }, {
             body: t.Object({
                 playerID: t.String(),
-                data: t.String(),
+                data: t.Object(t.Unknown()),
                 token: t.String(),
             })
         });
@@ -187,7 +183,7 @@ export namespace HttpHandler
             // make new thing
             const saveForCache = {
                 data: body.data,
-                slicedData: splitUtf8(body.data, 1_000_000),
+                slicedData: splitUtf8(JSON.stringify(body.data), 1_000_000),
 
                 // remove that from the cache after 30 mins
                 timeout: setTimeout(
@@ -204,7 +200,7 @@ export namespace HttpHandler
             body: t.Object({
                 playerID: t.String(),
                 index: t.String(),
-                data: t.String(),
+                data: t.Array(t.Unknown()),
                 token: t.String(),
             })
         });
@@ -218,18 +214,18 @@ export namespace HttpHandler
             // Migrate metadata
             const metadata = DatabaseInteractions.getDataEntryByID(db, body.fromID);
             if (!metadata) return { error: `No meta data from PlayerID ${body.fromID} was found`, err_type: "NOT_FOUND" }
-            const newdata = { ...metadata, playerID: body.toID, data: JSON.stringify(metadata!.data) } as DataEntry
+            const migratedPlayer = { ...metadata, playerID: body.toID, data: metadata!.data } as ParsedCommonData
 
             // Migrate saves
             const allSaves = DatabaseInteractions.getSavesOfPlayerByID(db, body.fromID);
             if (!allSaves) return { error: `No save data from PlayerID ${body.fromID} was found`, err_type: "NOT_FOUND" }
-            const migratedData: SaveEntry[] = allSaves.map(v => (({ ...v, playerID: body.toID, data: JSON.stringify(v!.data) })));
+            const migratedSave = allSaves.map(v => (({ ...v, playerID: body.toID, data: v!.data })));
 
-            logMigration({ migratedPlayer: newdata, migratedSave: migratedData })
+            logMigration({ migratedPlayer, migratedSave })
 
             return {
-                metadata: DatabaseInteractions.insertPlayers(db, [newdata]),
-                saves: DatabaseInteractions.insertSave(db, migratedData)
+                metadata: DatabaseInteractions.insertPlayers(db, [migratedPlayer]),
+                saves: DatabaseInteractions.insertSave(db, migratedSave)
             };
         }, {
             body: t.Object({
