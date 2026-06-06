@@ -1,20 +1,20 @@
 import { Database } from "bun:sqlite";
 
-export type UnarsedCommonData = {
+export type UnparsedCommonData = {
     playerID: string,
     data: string,
 }
 
-export type ParsedCommonData = {
-    playerID: string,
-    data: Array<unknown>,
-}
-
-export type ParsedCommonDataWithIndex = ParsedCommonData & {
+export type UnparsedCommonDataWithIndex = UnparsedCommonData & {
     index: string,
 }
 
-export type UnparsedCommonDataWithIndex = UnarsedCommonData & {
+export type ParsedSlotFormat = {
+    playerID: string,
+    data: Array<unknown>
+}
+
+export type ParsedSlotFormatWithIndex = ParsedSlotFormat & {
     index: string,
 }
 
@@ -74,12 +74,12 @@ export namespace DatabaseInteractions
         return "SUCCESS"
     }
 
-    export const getDataEntryByID = (db: Database, playerID: string) =>
+    export const getPlayerDataEntryByID = (db: Database, playerID: string) =>
         db.query(`
             SELECT * FROM players 
             WHERE playerID = ? 
             LIMIT 1
-        `).get(playerID) as ParsedCommonData;
+        `).get(playerID) as SavedPlayerFormat;
 
 
     // SLOT DATA:
@@ -99,7 +99,7 @@ export namespace DatabaseInteractions
 
     export const insertSave = (
         db: Database,
-        saveData: ParsedCommonDataWithIndex[]
+        saveData: ParsedSlotFormatWithIndex[]
     ): InteractionResult =>
     {
         try {
@@ -133,7 +133,7 @@ export namespace DatabaseInteractions
             ORDER BY increment DESC
         `).all(playerID) as SavedSlotDatabaseFormat[] | undefined;
         if (!res) return;
-        return res.map(v => JSON.parse(v.data)) as ParsedCommonDataWithIndex[];
+        return res.map(v => JSON.parse(v.data)) as ParsedSlotFormat[];
     };
 
     export const getSavesOfPlayerByIDWithIndex = (db: Database, playerID: string, index: string) =>
@@ -145,6 +145,6 @@ export namespace DatabaseInteractions
             LIMIT 1
         `).get(playerID, index) as SavedSlotDatabaseFormat | undefined;
         if (!res) return;
-        return { ...res, data: JSON.parse(res.data) } as ParsedCommonDataWithIndex;
+        return { ...res, data: JSON.parse(res.data) } as ParsedSlotFormatWithIndex;
     }
 }

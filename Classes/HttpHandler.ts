@@ -2,7 +2,7 @@ import { Elysia, t } from 'elysia';
 import { Database } from "bun:sqlite";
 import { ADMIN_TOKEN, isUsingPlaceholderAdminToken, isUsingPlaceholderWriteToken, logMigration, WRITE_TOKEN } from '..';
 import { GameEventsHandler } from './GameEventsHandler';
-import { DatabaseInteractions, type ParsedCommonData, type ParsedCommonDataWithIndex } from './DatabaseInteractions';
+import { DatabaseInteractions, type SavedPlayerFormat, type ParsedSlotFormatWithIndex, type ParsedSlotFormat } from './DatabaseInteractions';
 
 
 // AI slop here :)
@@ -94,14 +94,14 @@ export namespace HttpHandler
         app.listen(port);
 
         // read player data by id
-        app.get(`/${base}/player/:id`, ({ params: { id } }): errcode | ParsedCommonData =>
+        app.get(`/${base}/player/:id`, ({ params: { id } }): errcode | SavedPlayerFormat =>
         {
-            const player = DatabaseInteractions.getDataEntryByID(db, id);
+            const player = DatabaseInteractions.getPlayerDataEntryByID(db, id);
             return player ?? { error: 'Not found', err_type: "NOT_FOUND" };
         });
 
         // read all saves by player id
-        app.get(`/${base}/save/:id`, ({ params: { id } }): errcode | { saves: (ParsedCommonDataWithIndex | undefined)[] } =>
+        app.get(`/${base}/save/:id`, ({ params: { id } }): errcode | { saves: (ParsedSlotFormat | undefined)[] } =>
         {
             const saves = DatabaseInteractions.getSavesOfPlayerByID(db, id);
             return saves ? { saves } : { error: 'Not found', err_type: "NOT_FOUND" };
@@ -212,14 +212,14 @@ export namespace HttpHandler
             if (body.token !== WRITE_TOKEN) return { error: "Incorrect token", err_type: "INCORRECT_TOKEN" };
 
             // Migrate metadata
-            const metadata = DatabaseInteractions.getDataEntryByID(db, body.fromID);
+            const metadata = DatabaseInteractions.getPlayerDataEntryByID(db, body.fromID);
             if (!metadata) return { error: `No meta data from PlayerID ${body.fromID} was found`, err_type: "NOT_FOUND" }
-            const migratedPlayer = { ...metadata, playerID: body.toID, data: metadata!.data } as ParsedCommonData
+            const migratedPlayer = { ...metadata, playerID: body.toID, data: metadata!.data } as SavedPlayerFormat;
 
             // Migrate saves
             const allSaves = DatabaseInteractions.getSavesOfPlayerByID(db, body.fromID);
             if (!allSaves) return { error: `No save data from PlayerID ${body.fromID} was found`, err_type: "NOT_FOUND" }
-            const migratedSave = allSaves.map(v => (({ ...v, playerID: body.toID, data: v!.data })));
+            const migratedSave = allSaves.map(v => (({ ...v, playerID: body.toID, data: v!.data }))) as ParsedSlotFormatWithIndex[];
 
             logMigration({ migratedPlayer, migratedSave })
 

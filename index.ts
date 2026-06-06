@@ -5,7 +5,7 @@ import { HttpHandler } from "./Classes/HttpHandler";
 import { basename, extname, resolve } from "node:path";
 import { rename } from "node:fs/promises";
 import { TokenHandler } from "./Classes/TokenHandler";
-import { DatabaseInteractions, type ParsedDataResult, type ParsedSaveEntry, type UnparsedDataEntry, type UnparsedSaveEntry } from "./Classes/DatabaseInteractions";
+import { DatabaseInteractions, type ParsedSlotFormat, type ParsedSlotFormatWithIndex, type SavedPlayerFormat, type UnparsedCommonData, type UnparsedCommonDataWithIndex } from "./Classes/DatabaseInteractions";
 
 // export db write token
 const placeholder = "REPLACE THIS TEXT WITH YOUR TOKEN OR PASSWORD (BETTER USE TOKENS)";
@@ -17,14 +17,16 @@ export { ADMIN_TOKEN, isUsingPlaceholderAdminToken };
 
 // i3ym
 const unslash = (str: string) => str.replaceAll("\\\\", "\\")
-const destringifyData = <T>(entry: (T & UnparsedDataEntry) | undefined): (T & ParsedDataResult) | undefined =>
+
+function destringifyData(entry: UnparsedCommonData | undefined): SavedPlayerFormat | undefined;
+function destringifyData(entry: UnparsedCommonDataWithIndex | undefined): ParsedSlotFormatWithIndex | undefined;
+function destringifyData(entry: (UnparsedCommonData | UnparsedCommonDataWithIndex) | undefined): any
 {
     if (!entry) return undefined;
     let data = entry.data;
-    while (typeof data === "string")
-        data = JSON.parse(entry.data);
-
-    return ({ ...entry, data });
+    while (typeof data === "string") data = JSON.parse(data);
+    console.warn(typeof data);
+    return { ...entry, data };
 }
 
 
@@ -85,10 +87,9 @@ if (existsSync(TEXT_PLAYERS_FOLDER)) {
             resolve(TEXT_PLAYERS_FOLDER, file),
             (batch) => DatabaseInteractions.insertPlayers(db, batch.map(v =>
             {
-                const [playerID, data] = v;
+                const [playerID, data] = v as [string, string,];
                 return destringifyData({
-                    playerID: playerID!,
-                    data: data!
+                    playerID, data
                 });
             }).filter(v => !!v))
         );
@@ -108,11 +109,9 @@ if (existsSync(TEXT_SAVES_FOLDER)) {
             (batch) => DatabaseInteractions.insertSave(db,
                 batch.map(v =>
                 {
-                    const [increment, index, playerID, data] = v;
+                    const [increment, index, playerID, data] = v as [string, string, string, string,];
                     return destringifyData({
-                        playerID: playerID!,
-                        index: index!,
-                        data: data!
+                        playerID, index, data
                     });
                 }).filter(v => !!v)));
         promises.push(p);
@@ -131,7 +130,7 @@ const migrationsPlayer = `${TEXT_PLAYERS_FOLDER}/migrations.txt.processed`;
 const migrationsSave = `${TEXT_SAVES_FOLDER}/migrations.txt.processed`;
 
 // `${body.toID}\t${JSON.stringify(v.Data)}\n`
-export const logMigration = async ({ migratedPlayer, migratedSave }: { migratedPlayer: ParsedDataResult, migratedSave: ParsedSaveEntry[] }) =>
+export const logMigration = async ({ migratedPlayer, migratedSave }: { migratedPlayer: SavedPlayerFormat, migratedSave: ParsedSlotFormatWithIndex[] }) =>
 {
     // Player Metadata
     try {
