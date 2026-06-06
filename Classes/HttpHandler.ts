@@ -11,7 +11,7 @@ type MigrationResult = { error: string, err_type: ErrorType } | { metadata: stri
 type PlayerID = string;
 type SlotIndex = string;
 type PreparedCachedSaveData = {
-    data: Array<unknown>,
+    data: { [key: string]: unknown },
     slicedData: string[]
     timeout?: ReturnType<typeof setTimeout>
 };
@@ -180,7 +180,7 @@ export namespace HttpHandler
             clearTimeout(oldSave?.timeout);
 
             // make new thing
-            const saveForCache = {
+            const saveForCache: PreparedCachedSaveData = {
                 data: body.data,
                 slicedData: splitUtf8(JSON.stringify(body.data), 1_000_000),
 
@@ -199,7 +199,7 @@ export namespace HttpHandler
             body: t.Object({
                 playerID: t.String(),
                 index: t.String(),
-                data: t.Array(t.Unknown()),
+                data: t.Object(t.Unknown()),
                 token: t.String(),
             })
         });

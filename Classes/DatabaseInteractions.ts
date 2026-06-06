@@ -11,7 +11,7 @@ export type UnparsedCommonDataWithIndex = UnparsedCommonData & {
 
 export type ParsedSlotFormat = {
     playerID: string,
-    data: Array<unknown>
+    data: { [key: string]: any }
 }
 
 export type ParsedSlotFormatWithIndex = ParsedSlotFormat & {
