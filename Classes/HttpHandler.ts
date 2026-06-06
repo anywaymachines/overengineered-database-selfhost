@@ -4,10 +4,24 @@ import { ADMIN_TOKEN, isUsingPlaceholderAdminToken, isUsingPlaceholderWriteToken
 import { GameEventsHandler } from './GameEventsHandler';
 import { DatabaseInteractions, type SavedPlayerFormat, type ParsedSlotFormatWithIndex, type ParsedSlotFormat } from './DatabaseInteractions';
 
+type ErrorType = "OUT_OF_INDEX" | "NOT_FOUND" | "INCORRECT_TOKEN";
+type ErrorCode = { error: string, err_type: ErrorType } | { status: string };
+type MigrationResult = { error: string, err_type: ErrorType } | { metadata: string, saves: string }
+
+type PlayerID = string;
+type SlotIndex = string;
+type PreparedCachedSaveData = {
+    data: Array<unknown>,
+    slicedData: string[]
+    timeout?: ReturnType<typeof setTimeout>
+};
+const cachedSaveData = new Map<
+    PlayerID,
+    Map<SlotIndex, PreparedCachedSaveData>
+>();
 
 // AI slop here :)
-function splitUtf8(str: string, maxBytes = 4096)
-{
+function splitUtf8(str: string, maxBytes = 4096) {
     const buffer = Buffer.from(str, 'utf8');
     const chunks = [];
     let offset = 0;
@@ -35,24 +49,7 @@ function splitUtf8(str: string, maxBytes = 4096)
     return chunks;
 }
 
-type playerID = string;
-type slotIndex = string;
-type errType = "OUT_OF_INDEX" | "NOT_FOUND" | "INCORRECT_TOKEN";
-type errcode = { error: string, err_type: errType } | { status: string };
-type MigrationResult = { error: string, err_type: errType } | { metadata: string, saves: string }
-type preparedCachedSaveData = {
-    data: Array<unknown>,
-    slicedData: string[]
-    timeout?: ReturnType<typeof setTimeout>
-};
-
-const cachedSaveData = new Map<
-    playerID,
-    Map<slotIndex, preparedCachedSaveData>
->();
-
-const findCachedSaveData = (id: playerID, index: slotIndex) =>
-{
+const findCachedSaveData = (id: PlayerID, index: SlotIndex) => {
     const playerCached = cachedSaveData.get(id);
     if (!playerCached) {
         cachedSaveData.set(id, new Map());
@@ -63,8 +60,7 @@ const findCachedSaveData = (id: playerID, index: slotIndex) =>
 };
 
 
-const updateSaveCache = (db: Database, id: playerID, index: slotIndex): preparedCachedSaveData | undefined =>
-{
+const updateSaveCache = (db: Database, id: PlayerID, index: SlotIndex): PreparedCachedSaveData | undefined => {
     let cachedSave = findCachedSaveData(id, index);
     if (!cachedSave) {
         const gotSave = DatabaseInteractions.getSavesOfPlayerByIDWithIndex(db, id, index);
@@ -86,38 +82,32 @@ const updateSaveCache = (db: Database, id: playerID, index: slotIndex): prepared
     return cachedSave;
 }
 
-export namespace HttpHandler
-{
-    export const init = (db: Database, base: string, port: number) =>
-    {
+export namespace HttpHandler {
+    export const init = (db: Database, base: string, port: number) => {
         const app = new Elysia();
         app.listen(port);
 
         // read player data by id
-        app.get(`/${base}/player/:id`, ({ params: { id } }): errcode | SavedPlayerFormat =>
-        {
+        app.get(`/${base}/player/:id`, ({ params: { id } }): ErrorCode | SavedPlayerFormat => {
             const player = DatabaseInteractions.getPlayerDataEntryByID(db, id);
             return player ?? { error: 'Not found', err_type: "NOT_FOUND" };
         });
 
         // read all saves by player id
-        app.get(`/${base}/save/:id`, ({ params: { id } }): errcode | { saves: (ParsedSlotFormat | undefined)[] } =>
-        {
+        app.get(`/${base}/save/:id`, ({ params: { id } }): ErrorCode | { saves: (ParsedSlotFormat | undefined)[] } => {
             const saves = DatabaseInteractions.getSavesOfPlayerByID(db, id);
             return saves ? { saves } : { error: 'Not found', err_type: "NOT_FOUND" };
         });
 
         // read single save by player id
-        app.get(`/${base}/save/:id/:index`, ({ params: { id, index } }): errcode | string =>
-        {
+        app.get(`/${base}/save/:id/:index`, ({ params: { id, index } }): ErrorCode | string => {
             const save = updateSaveCache(db, id, index);
             if (save) return JSON.stringify(save.data);
             return { error: 'Not found', err_type: "NOT_FOUND" };
         });
 
         // read single save by player id by page 
-        app.get(`/${base}/save/:id/:index/:page`, ({ params: { id, index, page } }): errcode | string =>
-        {
+        app.get(`/${base}/save/:id/:index/:page`, ({ params: { id, index, page } }): ErrorCode | string => {
             const pg = Number(page);
             if (isNaN(pg)) return { error: 'No page found', err_type: "NOT_FOUND" };
 
@@ -140,8 +130,7 @@ export namespace HttpHandler
             });
 
         //get events
-        app.post(`/${base}/events`, ({ body }) =>
-        {
+        app.post(`/${base}/events`, ({ body }) => {
             if (isUsingPlaceholderAdminToken) return { error: "Using placeholder token", err_type: "INCORRECT_TOKEN" };
             if (body.token !== ADMIN_TOKEN) return { error: "Incorrect token", err_type: "INCORRECT_TOKEN" };
             GameEventsHandler.addEvent(body.data);
@@ -155,8 +144,7 @@ export namespace HttpHandler
             });
 
         // write player
-        app.post(`/${base}/player`, ({ body }): errcode =>
-        {
+        app.post(`/${base}/player`, ({ body }): ErrorCode => {
             if (isUsingPlaceholderWriteToken) return { error: "Using placeholder token", err_type: "INCORRECT_TOKEN" };
             if (body.token !== WRITE_TOKEN) return { error: "Incorrect token", err_type: "INCORRECT_TOKEN" };
             DatabaseInteractions.insertPlayers(db, [body]);
@@ -170,8 +158,7 @@ export namespace HttpHandler
         });
 
         // write save (I'm not doing batches)
-        app.post(`/${base}/save`, ({ body }): errcode =>
-        {
+        app.post(`/${base}/save`, ({ body }): ErrorCode => {
             if (isUsingPlaceholderWriteToken) return { error: "Using placeholder token", err_type: "INCORRECT_TOKEN" };
             if (body.token !== WRITE_TOKEN) return { error: "Incorrect token", err_type: "INCORRECT_TOKEN" };
             DatabaseInteractions.insertSave(db, [body]);
@@ -206,19 +193,18 @@ export namespace HttpHandler
         });
 
         // copies saves of one person to saves of another person
-        app.post(`/${base}/migrate`, ({ body }): MigrationResult =>
-        {
+        app.post(`/${base}/migrate`, ({ body }): MigrationResult => {
             if (isUsingPlaceholderWriteToken) return { error: "Using placeholder token", err_type: "INCORRECT_TOKEN" };
             if (body.token !== WRITE_TOKEN) return { error: "Incorrect token", err_type: "INCORRECT_TOKEN" };
 
             // Migrate metadata
             const metadata = DatabaseInteractions.getPlayerDataEntryByID(db, body.fromID);
-            if (!metadata) return { error: `No meta data from PlayerID ${body.fromID} was found`, err_type: "NOT_FOUND" }
+            if (!metadata) return { error: `No meta data from playerID ${body.fromID} was found`, err_type: "NOT_FOUND" }
             const migratedPlayer = { ...metadata, playerID: body.toID, data: metadata!.data } as SavedPlayerFormat;
 
             // Migrate saves
             const allSaves = DatabaseInteractions.getSavesOfPlayerByID(db, body.fromID);
-            if (!allSaves) return { error: `No save data from PlayerID ${body.fromID} was found`, err_type: "NOT_FOUND" }
+            if (!allSaves) return { error: `No save data from playerID ${body.fromID} was found`, err_type: "NOT_FOUND" }
             const migratedSave = allSaves.map(v => (({ ...v, playerID: body.toID, data: v!.data }))) as ParsedSlotFormatWithIndex[];
 
             logMigration({ migratedPlayer, migratedSave })
