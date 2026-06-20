@@ -100,10 +100,10 @@ export namespace HttpHandler
         });
 
         // read all saves by player id
-        app.get(`/${base}/save/:id`, ({ params: { id } }): ErrorCode | { saves: (ParsedSlotFormat | undefined)[] } =>
+        app.get(`/${base}/save/:id`, ({ params: { id } }): ErrorCode | { saves: ParsedSlotFormat["data"][] } =>
         {
             const saves = DatabaseInteractions.getSavesOfPlayerByID(db, id);
-            return saves ? { saves } : { error: 'Not found', err_type: "NOT_FOUND" };
+            return saves ? { saves: saves.map(s => s.data) } : { error: 'Not found', err_type: "NOT_FOUND" };
         });
 
         // read single save by player id
@@ -220,10 +220,10 @@ export namespace HttpHandler
             if (!metadata) return { error: `No meta data from playerID ${body.fromID} was found`, err_type: "NOT_FOUND" }
             const migratedPlayer = { ...metadata, playerID: body.toID, data: metadata!.data } as SavedPlayerFormat;
 
-            // Migrate saves
+            // Migrate saves — each keeps its own index.
             const allSaves = DatabaseInteractions.getSavesOfPlayerByID(db, body.fromID);
-            if (!allSaves) return { error: `No save data from playerID ${body.fromID} was found`, err_type: "NOT_FOUND" }
-            const migratedSave = allSaves.map(v => (({ ...v, playerID: body.toID, data: v!.data }))) as ParsedSlotFormatWithIndex[];
+            if (!allSaves.length) return { error: `No save data from playerID ${body.fromID} was found`, err_type: "NOT_FOUND" }
+            const migratedSave = allSaves.map(v => ({ ...v, playerID: body.toID })) as ParsedSlotFormatWithIndex[];
 
             logMigration({ migratedPlayer, migratedSave })
 

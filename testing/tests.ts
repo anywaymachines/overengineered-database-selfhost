@@ -117,3 +117,41 @@ test("Write save data with token", async () =>
     // await writeData(before);
     console.log("Single save retrieved page by page and parsed");
 });
+
+
+test("migrate copies player saves WITH their index", async () =>
+{
+    const B = "http://localhost:1367/overengineered";
+    const fromID = playerID;             // "1" — known to have a save at slotIndex with blocks
+    const toID = `mtest_${Date.now()}`;  // fresh target each run, so leftovers don't mask bugs
+
+    // sanity: the source save we expect to migrate actually exists
+    const srcSave = await (await fetch(`${B}/save/${fromID}/${slotIndex}`)).json();
+    if (!srcSave.blocks) throw `Source ${fromID}/${slotIndex} has no blocks to migrate: ${JSON.stringify(srcSave).slice(0, 80)}`;
+
+    // run the migration
+    const migrateJson = await (await fetch(`${B}/migrate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fromID, toID, token: WRITE_TOKEN }),
+    })).json();
+    if (migrateJson.error) throw `Migration failed: ${JSON.stringify(migrateJson)}`;
+    if (migrateJson.metadata !== "SUCCESS" || migrateJson.saves !== "SUCCESS")
+        throw `Migration did not report success: ${JSON.stringify(migrateJson)}`;
+
+    // player metadata must land on the target
+    const tgtPlayer = await (await fetch(`${B}/player/${toID}`)).json();
+    if (tgtPlayer.error) throw `Target player metadata not migrated: ${JSON.stringify(tgtPlayer)}`;
+
+    // THE REGRESSION: the save must be reachable by its index on the target.
+    // Before the fix, saves were written with index = NULL, so this 404s.
+    const tgtSave = await (await fetch(`${B}/save/${toID}/${slotIndex}`)).json();
+    if (tgtSave.error) throw `Migrated save at index ${slotIndex} not found on target (index was lost!): ${JSON.stringify(tgtSave)}`;
+    if (!tgtSave.blocks) throw `Migrated save has no blocks: ${JSON.stringify(tgtSave).slice(0, 80)}`;
+
+    // and the data must be identical to the source
+    if (JSON.stringify(srcSave) !== JSON.stringify(tgtSave))
+        throw `Migrated save differs from source.\n src: ${JSON.stringify(srcSave).slice(0, 120)}\n tgt: ${JSON.stringify(tgtSave).slice(0, 120)}`;
+
+    console.log(`Migration ${fromID} -> ${toID} verified: save index ${slotIndex} copied with matching data.`);
+});

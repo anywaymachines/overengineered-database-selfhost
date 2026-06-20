@@ -128,14 +128,14 @@ export namespace DatabaseInteractions {
         return "SUCCESS"
     }
 
+    // Full rows (with index), data parsed. Map to .data if you only need the blobs.
     export const getSavesOfPlayerByID = (db: Database, playerID: string) => {
         const res = db.query(`
             SELECT * FROM saves
             WHERE playerID = ?
             ORDER BY increment DESC
-        `).all(playerID) as SavedSlotDatabaseFormat[] | undefined;
-        if (!res) return;
-        return res.map(v => JSON.parse(v.data)) as ParsedSlotFormat[];
+        `).all(playerID) as SavedSlotDatabaseFormat[];
+        return res.map(v => ({ ...v, data: JSON.parse(v.data) })) as ParsedSlotFormatWithIndex[];
     };
 
     export const getSavesOfPlayerByIDWithIndex = (db: Database, playerID: string, index: string) => {
