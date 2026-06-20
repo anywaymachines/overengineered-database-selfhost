@@ -78,7 +78,7 @@ const TEXT_PLAYERS_FOLDER = "./db_files/players";
 if (existsSync(TEXT_PLAYERS_FOLDER)) {
     for (const file of readdirSync(TEXT_PLAYERS_FOLDER)) {
         const start = Date.now();
-        const name = `saves/${file}`;
+        const name = `players/${file}`;
         console.log(`Loading ${name}...`);
 
 
@@ -101,7 +101,7 @@ const TEXT_SAVES_FOLDER = "./db_files/saves";
 if (existsSync(TEXT_SAVES_FOLDER)) {
     for (const file of readdirSync(TEXT_SAVES_FOLDER)) {
         const start = Date.now();
-        const name = `players/${file}`;
+        const name = `saves/${file}`;
         console.log(`Loading ${name}...`);
         const p = convertToSQL(
             resolve(TEXT_SAVES_FOLDER, file),
