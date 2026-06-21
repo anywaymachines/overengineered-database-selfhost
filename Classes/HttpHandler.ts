@@ -62,8 +62,17 @@ const findCachedSaveData = (id: PlayerID, index: SlotIndex) =>
 };
 
 
+// for test only
+const DISABLE_CACHE = true;
+
 const updateSaveCache = (db: Database, id: PlayerID, index: SlotIndex): PreparedCachedSaveData | undefined =>
 {
+    if (DISABLE_CACHE) {
+        const gotSave = DatabaseInteractions.getSavesOfPlayerByIDWithIndex(db, id, index);
+        if (!gotSave) return;
+        return { data: gotSave.data, slicedData: splitUtf8(JSON.stringify(gotSave), 1_000_000) };
+    }
+
     let cachedSave = findCachedSaveData(id, index);
     if (!cachedSave) {
         const gotSave = DatabaseInteractions.getSavesOfPlayerByIDWithIndex(db, id, index);
