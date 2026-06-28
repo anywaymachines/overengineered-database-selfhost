@@ -37,6 +37,24 @@ export type SavedPlayerFormat = {
 
 export type InteractionResult = "SUCCESS" | "FAIL"
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+    typeof value === "object" && value !== null && !Array.isArray(value);
+
+export const wrapSavePayload = (data: Record<string, any>) => {
+    if (isRecord(data) && Object.keys(data).length === 1 && "data" in data && isRecord(data.data)) {
+        return data;
+    }
+    return { data };
+};
+
+export const unwrapSavePayload = (value: unknown) => {
+    if (isRecord(value) && Object.keys(value).length === 1 && "data" in value) {
+        const inner = value.data;
+        if (isRecord(inner)) return inner as Record<string, any>;
+    }
+    return value as Record<string, any>;
+};
+
 export namespace DatabaseInteractions {
     /* USERID \t {
          "data": { ... }, 
@@ -135,7 +153,7 @@ export namespace DatabaseInteractions {
             WHERE playerID = ?
             ORDER BY increment DESC
         `).all(playerID) as SavedSlotDatabaseFormat[];
-        return res.map(v => ({ ...v, data: JSON.parse(v.data) })) as ParsedSlotFormatWithIndex[];
+        return res.map(v => ({ ...v, data: unwrapSavePayload(JSON.parse(v.data)) })) as ParsedSlotFormatWithIndex[];
     };
 
     export const getSavesOfPlayerByIDWithIndex = (db: Database, playerID: string, index: string) => {
@@ -146,6 +164,6 @@ export namespace DatabaseInteractions {
             LIMIT 1
         `).get(playerID, index) as SavedSlotDatabaseFormat | undefined;
         if (!res) return;
-        return { ...res, data: JSON.parse(res.data) } as ParsedSlotFormatWithIndex;
+        return { ...res, data: unwrapSavePayload(JSON.parse(res.data)) } as ParsedSlotFormatWithIndex;
     }
 }

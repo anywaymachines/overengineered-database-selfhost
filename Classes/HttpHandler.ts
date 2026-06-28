@@ -2,7 +2,7 @@ import { Elysia, t } from 'elysia';
 import { Database } from "bun:sqlite";
 import { ADMIN_TOKEN, isUsingPlaceholderAdminToken, isUsingPlaceholderWriteToken, logMigration, WRITE_TOKEN } from '..';
 import { GameEventsHandler } from './GameEventsHandler';
-import { DatabaseInteractions, type SavedPlayerFormat, type ParsedSlotFormatWithIndex, type ParsedSlotFormat } from './DatabaseInteractions';
+import { DatabaseInteractions, wrapSavePayload, type SavedPlayerFormat, type ParsedSlotFormatWithIndex, type ParsedSlotFormat } from './DatabaseInteractions';
 
 export type ErrorType = "OUT_OF_INDEX" | "NOT_FOUND" | "INCORRECT_TOKEN" | "INSERT_FAIL";
 type ErrorCode = { error: string, err_type: ErrorType } | { status: string };
@@ -51,7 +51,7 @@ function splitUtf8(str: string, maxBytes = 4096)
 }
 
 const findCachedSaveData = (id: PlayerID, index: SlotIndex) =>
-{
+    {
     const playerCached = cachedSaveData.get(id);
     if (!playerCached) {
         cachedSaveData.set(id, new Map());
@@ -63,7 +63,7 @@ const findCachedSaveData = (id: PlayerID, index: SlotIndex) =>
 
 
 // for test only
-const DISABLE_CACHE = true;
+const DISABLE_CACHE = false;
 
 const updateSaveCache = (db: Database, id: PlayerID, index: SlotIndex): PreparedCachedSaveData | undefined =>
 {
@@ -96,8 +96,8 @@ const updateSaveCache = (db: Database, id: PlayerID, index: SlotIndex): Prepared
 
 export namespace HttpHandler
 {
-    export const init = (db: Database, base: string, port: number) =>
-    {
+    export const init = (db: Database, base: string, port: number) => 
+        {
         const app = new Elysia();
         app.listen(port);
 
@@ -124,8 +124,8 @@ export namespace HttpHandler
         });
 
         // read single save by player id by page 
-        app.get(`/${base}/save/:id/:index/:page`, ({ params: { id, index, page } }): ErrorCode | string =>
-        {
+        app.get(`/${base}/save/:id/:index/:page`, ({ params: { id, index, page } }): ErrorCode | string => 
+            {
             const pg = Number(page);
             if (isNaN(pg)) return { error: 'No page found', err_type: "NOT_FOUND" };
 
@@ -180,13 +180,14 @@ export namespace HttpHandler
         });
 
         // write save (I'm not doing batches)
-        app.post(`/${base}/save`, ({ body }): ErrorCode =>
-        {
+        app.post(`/${base}/save`, ({ body }): ErrorCode => 
+            {
             if (isUsingPlaceholderWriteToken) return { error: "Using placeholder token", err_type: "INCORRECT_TOKEN" };
             if (body.token !== WRITE_TOKEN) return { error: "Incorrect token", err_type: "INCORRECT_TOKEN" };
             if (!Object.keys(body.data).length) return { error: "Incorrect body data type", err_type: "INSERT_FAIL" };
 
-            const insertResult = DatabaseInteractions.insertSave(db, [body]);
+            const wrappedSaveData = wrapSavePayload(body.data);
+            const insertResult = DatabaseInteractions.insertSave(db, [{ ...body, data: wrappedSaveData }]);
             if (insertResult === "FAIL") return { error: "Error while upserting save data", err_type: "INSERT_FAIL" };
 
             // clear cache
@@ -205,7 +206,9 @@ export namespace HttpHandler
                 )
             };
 
-            cachedSaveData.get(body.playerID)?.set(body.index, saveForCache);
+            const playerCache = cachedSaveData.get(body.playerID) ?? new Map<SlotIndex, PreparedCachedSaveData>();
+            cachedSaveData.set(body.playerID, playerCache);
+            playerCache.set(body.index, saveForCache);
 
 
             return { status: 'ok' };
