@@ -63,7 +63,7 @@ const findCachedSaveData = (id: PlayerID, index: SlotIndex) =>
 
 
 // for test only
-const DISABLE_CACHE = true;
+const DISABLE_CACHE = false;
 
 const updateSaveCache = (db: Database, id: PlayerID, index: SlotIndex): PreparedCachedSaveData | undefined => 
     {
