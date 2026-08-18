@@ -33,7 +33,6 @@ function destringifyData(entry: (UnparsedCommonData | UnparsedCommonDataWithInde
 }
 
 
-// could've done generic but I'm too lazy
 /**
  * Reads a curated `.json` / `.jsonl` file — already-correct rows that must not be run through any repair.
  * See {@link CuratedImport}. Returns false when the file is not of that kind, so the caller falls through to
@@ -47,6 +46,10 @@ const importCurated = async (filepath: string, rowsFrom: (parsed: unknown) => un
 
     console.log("filepath:", filepath, "(curated, no repairs applied)");
     const rows: unknown[] = [];
+    // spreading a whole file's rows into push() overflows the stack somewhere past half a million of them
+    const collect = (parsed: unknown) => { for (const row of rowsFrom(parsed)) rows.push(row); };
+    let parsed = 0;
+    let failed = 0;
 
     if (CuratedImport.isLineDelimited(extension)) {
         // streamed, so a large file never has to be held whole
@@ -57,24 +60,37 @@ const importCurated = async (filepath: string, rowsFrom: (parsed: unknown) => un
             if (line.trim().length === 0) continue;
 
             try {
-                rows.push(...rowsFrom(JSON.parse(line)));
+                collect(JSON.parse(line));
+                parsed++;
             } catch (err) {
+                failed++;
                 console.warn(`Skipped ${basename(filepath)} line ${lineNumber}: ${err}`);
             }
         }
     } else {
         try {
-            rows.push(...rowsFrom(JSON.parse(await Bun.file(filepath).text())));
+            collect(JSON.parse(await Bun.file(filepath).text()));
+            parsed++;
         } catch (err) {
+            failed++;
             console.warn(`Skipped ${basename(filepath)}: ${err}`);
         }
     }
 
     if (rows.length) insert(rows);
+
+    // a file nothing could be read from is left alone rather than marked done: a single typo in a hand-edited
+    // .json otherwise consumes the whole file, and the warning above is easy to miss in a long import log
+    if (parsed === 0 && failed > 0) {
+        console.warn(`Left ${basename(filepath)} unprocessed so it can be corrected and retried.`);
+        return true;
+    }
+
     await rename(filepath, filepath + ".processed");
     return true;
 }
 
+// could've done generic but I'm too lazy
 const convertToSQL = async (filepath: string, callback: (line: string[][]) => void) =>
 {
     if (extname(filepath) !== ".txt") return;

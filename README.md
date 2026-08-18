@@ -51,6 +51,11 @@ The same content as `.jsonl` is one object per line:
 {"148819022":{"12":{"version":38,"blocks":[]}}}
 ```
 
+Two things to know when hand-editing: duplicate user ids inside one `.json` object are resolved by JSON itself,
+last one wins, so merging files needs care — `.jsonl` has no such limit since each line stands alone. And a file
+nothing could be parsed from is **left unprocessed** rather than renamed, so a typo can be corrected and the
+file retried; only files that were at least partly read get the `.processed` suffix.
+
 Note that `data` here is a real nested object, not a string of escaped JSON — so there is no escaping to get
 wrong when editing an entry by hand. Files are renamed `.processed` after import, exactly like `.txt`. A line
 or file that fails to parse is skipped with a warning and the rest still import.
