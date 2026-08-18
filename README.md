@@ -16,7 +16,7 @@
 
 ### Importing already-correct saves (.json / .jsonl)
 
-The `.txt` import above is for the 2019 dump, which is uniformly double-escaped and gets unslashed on the way
+The `.txt` import above is for the original export, which is uniformly double-escaped and gets unslashed on the way
 in. That repair must not touch data which is already correct — and running it twice on a row you just fixed by
 hand breaks it again, because `\\\\` becomes `\\` becomes `\`.
 

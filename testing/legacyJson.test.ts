@@ -6,7 +6,9 @@ const { peel, unslash, needsUnslashing, FAILED, MAX_PEELS } = LegacyJson;
 // --- provenance, which is the only sound signal ---
 
 test("the legacy dump is unslashed, migrations files are not", () => {
-    expect(needsUnslashing("saves_2019_part1.txt")).toBe(true);
+    expect(needsUnslashing("slots.1.txt")).toBe(true);
+    expect(needsUnslashing("slots1.txt")).toBe(true);
+    expect(needsUnslashing("players.txt")).toBe(true);
     expect(needsUnslashing("playerdata_example.txt")).toBe(true);
 
     // matched loosely on purpose: a renamed or re-cased copy must not fall through to the corrupting branch

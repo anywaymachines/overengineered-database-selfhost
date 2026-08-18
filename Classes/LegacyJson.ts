@@ -4,7 +4,9 @@
  */
 export namespace LegacyJson {
     /**
-     * The 2019 export doubled every backslash in the dump. Undoing that is correct for **those files and only
+     * The original export — the database as it came off the officially run game, before this fork — was
+     * double-escaped by a mistake during deserialization, doubling every backslash. Undoing that is correct for
+     * **those files and only
      * those files** — `\\` is equally how correct JSON encodes one literal backslash, and player content is
      * full of them (Lua circuit source, function expressions, string blocks).
      *

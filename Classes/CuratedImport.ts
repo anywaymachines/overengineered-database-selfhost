@@ -3,7 +3,7 @@ import type { ParsedSlotFormatWithIndex, SavedPlayerFormat } from "./DatabaseInt
 /**
  * The curated import channel: files a maintainer has already repaired by hand, or that this app wrote itself.
  *
- * The `.txt` channel exists for the 2019 dump, which is uniformly double-escaped and must be unslashed. Running
+ * The `.txt` channel exists for the original export, which is uniformly double-escaped and must be unslashed. Running
  * that over an already-correct row damages it — and doing it twice damages a row the maintainer just fixed,
  * since `\\\\` becomes `\\` becomes `\`. Rather than trying to detect which is which, correctness is declared by
  * the extension: **nothing in this file is repaired, transformed, or unescaped.**
